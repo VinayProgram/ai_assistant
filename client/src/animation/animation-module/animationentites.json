@@ -1,0 +1,32 @@
+ {"entities": {
+    "leadHero": {
+      "characters": {
+        "character1": {
+          "metadata": {
+            "src": "hero_idle.svg"
+          }
+        },
+        "character2": {
+          "metadata": {
+            "src": "hero_angry.svg"
+          }
+        }
+      },
+      "defaultCharacter": "character1"
+    },
+    "leadHero2": {
+      "characters": {
+        "character1": {
+          "metadata": {
+            "src": "sidekick_idle.svg"
+          }
+        },
+        "character2": {
+          "metadata": {
+            "src": "sidekick_happy.svg"
+          }
+        }
+      },
+      "defaultCharacter": "character1"
+    }
+  }}

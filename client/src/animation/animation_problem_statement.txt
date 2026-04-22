@@ -1,0 +1,245 @@
+Problem statement: Making 2D animation easier with AI
+
+2D character animation is still difficult to automate. Unlike 3D characters, SVG or 2D characters usually do not come with a complete rigging system that supports natural motion in every pose. A 2D character is often built from separate parts such as head, torso, arms, forearms, hands, thighs, and legs, but these parts are not always labeled properly, not always grouped correctly, and not always drawable in a way that supports smooth animation.
+
+Because of this, using an LLM to animate arbitrary SVG characters is challenging.
+
+The key problems are:
+
+1. Lack of proper rigging
+
+In 2D SVG characters, body parts are usually separated into pieces, but those pieces do not always behave like a real rig. Rotating an arm or leg often looks rigid. Complex poses such as folded hands, crossed arms, hand-on-hip, or bent elbows often require replacement parts rather than simple rotation. This makes fully automatic animation difficult.
+
+2. Incorrect or missing labeling
+
+When an SVG is uploaded, it may contain useful body parts, but the part names are usually unclear. IDs may be generic like path12, group4, or layer7. The system does not know which part is a head, which is an arm, and which part is a replaceable pose asset. Without correct semantic labeling, AI cannot control the body reliably.
+
+3. No clear action mapping
+
+Even when the SVG contains separable parts, those parts are not immediately actionable. The system must first understand:
+
+what each part represents
+how it connects to other parts
+where its pivot is
+whether it is rotatable, replaceable, or both
+
+Only after this can the body be controlled by AI.
+
+Proposed solution
+
+The solution is to build an AI-assisted 2D animation system for SVG characters.
+
+The goal is to convert an uploaded SVG into a structured, controllable character representation that can later be animated by an LLM or motion engine.
+
+Core idea
+
+A 2D SVG should be treated as a collection of interactive body parts, almost like plug-and-play modules.
+
+For example:
+
+{
+  "hand": {
+    "1": {
+      "position": [x, y],
+      "rotation": 0,
+      "matrix": [],
+      "id": "path_12"
+    },
+    "2": {
+      "position": [x, y],
+      "rotation": 0,
+      "matrix": [],
+      "id": "path_13"
+    }
+  }
+}
+
+Each part should have:
+
+semantic name
+SVG id
+transform data
+pivot point
+relation to parent part
+replacement variants if available
+
+Once this structure exists, the body becomes actionable and can be controlled by AI.
+
+First major task: Interactive part identification
+
+The first step is not animation. The first step is understanding the SVG.
+
+A raycasting or picking system should be built so that:
+
+the user uploads an SVG
+the system renders the SVG interactively
+the user points to or clicks on a shape
+the selected shape is captured and stored
+the user or AI assigns meaning to that part
+
+For example, the user clicks on a shape and marks it as:
+
+left hand
+right hand
+upper arm
+lower arm
+head
+torso
+
+This creates a ground-truth structure for the SVG.
+
+The AI can then assist by:
+
+suggesting labels
+grouping related parts
+identifying likely mirrored parts
+detecting possible replacement poses
+generating the final control schema
+
+This solves the labeling problem.
+
+Second major task: Build an actionable body schema
+
+Once parts are identified, the character must be converted into a machine-readable body model.
+
+Example:
+
+{
+  "head": {
+    "id": "g_head",
+    "pivot": [120, 60],
+    "parent": "torso",
+    "type": "rotatable"
+  },
+  "leftUpperArm": {
+    "id": "g_lua",
+    "pivot": [85, 110],
+    "parent": "torso",
+    "type": "rotatable"
+  },
+  "leftLowerArm": {
+    "id": "g_lla",
+    "pivot": [78, 145],
+    "parent": "leftUpperArm",
+    "type": "rotatable"
+  },
+  "leftHandFolded": {
+    "id": "g_lhand_folded",
+    "parent": "leftLowerArm",
+    "type": "replaceable_pose"
+  }
+}
+
+This schema becomes the control layer for animation.
+
+Third major task: Support both rigging and replacement poses
+
+A pure transform-based system is not enough for 2D animation.
+
+Some poses can be created using:
+
+rotation
+translation
+scaling
+interpolation
+
+But some poses require:
+
+alternate hand drawings
+folded arm versions
+bent elbow variants
+side-view or front-view replacement assets
+
+So the system should support two animation modes:
+
+transform-based motion
+asset replacement-based motion
+
+This hybrid model makes 2D animation easier and more natural.
+
+Why this matters for LLM animation
+
+An LLM cannot directly animate a random SVG unless the SVG first becomes structured.
+
+The LLM needs:
+
+correctly labeled parts
+known pivot points
+transform rules
+available replacement poses
+body hierarchy
+action constraints
+
+After that, the LLM can generate animation instructions such as:
+
+{
+  "frame": 12,
+  "actions": [
+    { "part": "leftUpperArm", "rotation": -25 },
+    { "part": "leftLowerArm", "rotation": 40 },
+    { "part": "mouth", "replaceWith": "smile_2" }
+  ]
+}
+
+So the real challenge is not only animation generation.
+The real challenge is converting arbitrary SVG characters into controllable animation-ready datasets.
+
+Dataset creation is the most important part
+
+The most important requirement for this system is dataset creation.
+
+A proper dataset should include:
+
+uploaded SVG
+identified parts
+corrected part names
+pivots
+parent-child relations
+allowed motions
+replacement assets
+pose examples
+action mappings
+
+Example dataset entry:
+
+{
+  "character_id": "char_001",
+  "parts": [
+    {
+      "svg_id": "path_31",
+      "label": "leftHand",
+      "pivot": [145, 220],
+      "parent": "leftLowerArm",
+      "type": "replaceable"
+    }
+  ],
+  "poses": [
+    {
+      "name": "wave_start",
+      "transforms": {
+        "leftUpperArm": -30,
+        "leftLowerArm": 20
+      }
+    }
+  ]
+}
+
+This dataset becomes the foundation for:
+
+AI-assisted rigging
+pose generation
+animation control
+automated story-to-motion systems
+Final vision
+
+The final system should work like this:
+
+user uploads SVG
+SVG is rendered interactively
+user clicks body parts
+AI suggests labels and grouping
+system builds structured body schema
+pivots and relations are stored
+replaceable pose assets are identified
+animation becomes machine-controllable
+LLM generates actions or frame plans using this schema
