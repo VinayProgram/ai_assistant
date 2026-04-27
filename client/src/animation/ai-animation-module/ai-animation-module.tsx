@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Music4, Pause, Play, Sparkles, WandSparkles } from "lucide-react";
+import { Download, Film, Music4, Pause, Play, Sparkles, WandSparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -89,6 +89,16 @@ function renderRuleFromFrameState(
   };
 }
 
+function loadImage(assetUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Failed to load asset: ${assetUrl}`));
+    image.src = assetUrl;
+  });
+}
+
 function sanitizeEntitiesForPrompt(document: AnimationEntitiesDocument) {
   return {
     entities: Object.fromEntries(
@@ -164,6 +174,7 @@ const AiAnimationGenModule = () => {
     fileName: string;
     previewUrl: string;
   } | null>(null);
+  const [isExportingVideo, setIsExportingVideo] = React.useState(false);
 
   const activeAnimationDocument = React.useMemo<AnimationFileShape>(
     () => ({
@@ -282,6 +293,160 @@ const AiAnimationGenModule = () => {
     event.target.value = "";
   };
 
+  const handleDownloadAnimation = () => {
+    const exportDocument = {
+      sceneMetadata: {
+        ...activeAnimationDocument.sceneMetadata,
+        fps: currentFps,
+      },
+      frames: activeAnimationDocument.frames,
+    };
+
+    const blob = new Blob([JSON.stringify(exportDocument, null, 2)], {
+      type: "application/json",
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = downloadUrl;
+    anchor.download = generatedFrames
+      ? "generated-animation.json"
+      : "animation-preview.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(downloadUrl);
+  };
+
+  const handleDownloadVideo = async () => {
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+      setGenerationError("Video export is not supported in this browser.");
+      return;
+    }
+
+    try {
+      setGenerationError("");
+      setIsExportingVideo(true);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = sceneWidth;
+      canvas.height = sceneHeight;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Could not create canvas context for video export.");
+      }
+
+      const stream = canvas.captureStream(Math.max(currentFps, 1));
+      const recordedChunks: BlobPart[] = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType: "video/webm",
+      });
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      const recorderStopped = new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+      });
+
+      const assetsByEntityId = await Promise.all(
+        Object.entries(entitiesDocument.entities).map(async ([entityId, entity]) => {
+          const entries = await Promise.all(
+            Object.entries(entity.characters).map(async ([characterId, character]) => {
+              const assetUrl = character.metadata.previewUrl || character.metadata.src || "";
+              const image = await loadImage(assetUrl);
+              return [characterId, image] as const;
+            })
+          );
+
+          return [entityId, Object.fromEntries(entries)] as const;
+        })
+      );
+
+      const imageLookup = Object.fromEntries(assetsByEntityId);
+      const frameIds = getSortedFrameIds(activeAnimationDocument);
+      const frameDuration = 1000 / Math.max(currentFps, 1);
+
+      const drawFrame = (frameId: string) => {
+        const frame = activeAnimationDocument.frames[frameId] ?? {};
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const backgroundFill = sceneBackground.trim();
+        if (backgroundFill.startsWith("linear-gradient")) {
+          const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+          gradient.addColorStop(0, "#f8fbff");
+          gradient.addColorStop(0.6, "#eef6ff");
+          gradient.addColorStop(1, "#fff8eb");
+          context.fillStyle = gradient;
+        } else {
+          context.fillStyle = backgroundFill || "#ffffff";
+        }
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (const [entityId, frameState] of Object.entries(frame)) {
+          if (!frameState.visible || frameState.opacity <= 0) {
+            continue;
+          }
+
+          const entity = entitiesDocument.entities[entityId];
+          const character = resolveEntityCharacter(entity, frameState.activeCharacter);
+          const image = imageLookup[entityId]?.[character?.id ?? ""];
+
+          if (!entity || !character || !image) {
+            continue;
+          }
+
+          const [x, y] = frameState.position;
+          const [scaleX, scaleY] = frameState.scale;
+          const width = 140;
+          const height = 140;
+
+          context.save();
+          context.globalAlpha = frameState.opacity;
+          context.translate(canvas.width / 2 + x, canvas.height / 2 + y);
+          context.rotate((frameState.rotation * Math.PI) / 180);
+          context.scale(scaleX, scaleY);
+          context.drawImage(image, -width / 2, -height / 2, width, height);
+          context.restore();
+        }
+      };
+
+      recorder.start();
+
+      for (const frameId of frameIds) {
+        drawFrame(frameId);
+        await new Promise((resolve) => window.setTimeout(resolve, frameDuration));
+      }
+
+      recorder.stop();
+      await recorderStopped;
+
+      const videoBlob = new Blob(recordedChunks, { type: "video/webm" });
+      const downloadUrl = URL.createObjectURL(videoBlob);
+      const anchor = document.createElement("a");
+
+      anchor.href = downloadUrl;
+      anchor.download = generatedFrames
+        ? "generated-animation.webm"
+        : "animation-preview.webm";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      setGenerationError(
+        error instanceof Error ? error.message : "Failed to export animation video"
+      );
+    } finally {
+      setIsExportingVideo(false);
+    }
+  };
+
   React.useEffect(() => {
     return () => {
       if (audioAsset?.previewUrl) {
@@ -323,6 +488,18 @@ const AiAnimationGenModule = () => {
             </p>
             <p className="mt-1 font-mono text-sm text-slate-700">{currentFrameId}</p>
           </div>
+          <Button variant="outline" onClick={handleDownloadAnimation}>
+            <Download className="size-4" />
+            Download
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleDownloadVideo}
+            disabled={isExportingVideo || sortedFrameIds.length === 0}
+          >
+            <Film className="size-4" />
+            {isExportingVideo ? "Exporting..." : "Download Video"}
+          </Button>
           <Button onClick={() => setIsPlaying((current) => !current)}>
             {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
             {isPlaying ? "Pause" : "Play"}

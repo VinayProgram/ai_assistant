@@ -1,7 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { ImageGenerationPrompt, StorytoImagesPrompt } from "./prompt";
-
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const LIZA_API_BASE_URL =
   import.meta.env.VITE_LIZA_API_BASE_URL ||
@@ -9,7 +7,6 @@ const LIZA_API_BASE_URL =
   "http://localhost:8000";
 
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-const genAi = new  GoogleGenerativeAI(GEMINI_API_KEY)
 export type ImagePromptApiResponse = {
   response?: string;
   detail?: string;
@@ -115,21 +112,43 @@ export async function generateVisualPrompt({
 }
 
 
-export async function generateImagesPrompt(characters:string) {
+export async function generateImagesPrompt(characters: string) {
   // Use the Flash Preview model for speed and specialized reasoning
-  const model = genAi.getGenerativeModel({ 
-    model: "gemini-3.1-flash-preview-0514" 
-  });
-
+  if (!ai) {
+    throw new Error("Missing VITE_GEMINI_API_KEY");
+  }
   try {
-    const result = await model.generateContent(ImageGenerationPrompt(characters));
-    const response = await result.response;
-    return response.text();
+    const result = await ai.models.generateContent({
+      model:  "gemini-2-5-flash-image-preview",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: ImageGenerationPrompt(characters),
+            },
+          ],
+        },
+      ],
+       config: {
+      responseModalities: [Modality.TEXT, Modality.IMAGE],
+    },
+    });
+    console.log(result);
+    // for (const part of result.candidates?[0].parts) {
+    //   if (part.text) {
+    //     console.log(part.text);
+    //   } else if (part.inlineData) {
+    //     const imageData = part.inlineData.data;
+    //     const buffer = Buffer.from(imageData, "base64");
+    //     fs.writeFileSync("gemini-native-image.png", buffer);
+    //     console.log("Image saved as gemini-native-image.png");
+    //   }
+    // }
   } catch (error) {
     console.error("Error generating code/prompt:", error);
     return null;
   }
-  throw new Error("Missing VITE_GEMINI_API_KEY");
 }
 
 export { GEMINI_API_KEY, LIZA_API_BASE_URL };

@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { generateVisualPrompt, type CharacterPrompts } from './ai-image-generation-api';
+import { generateImagesPrompt, generateVisualPrompt, type CharacterPrompts } from './ai-image-generation-api';
 const AiImageModule = () => {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -26,10 +26,17 @@ const AiImageModule = () => {
       const d = await generateVisualPrompt({ storyText: prompt });
       console.log(d);
       if (d) setPrompts(d);
+     
     } finally {
       setIsGenerating(false);
     }
   };
+
+  async function generateImages(chrPrompt: string) {
+   
+        console.log(await generateImagesPrompt(chrPrompt));
+      
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 p-4 md:p-8">
@@ -53,9 +60,11 @@ const AiImageModule = () => {
             <div key={name}>
               <h3>{name}</h3>
               <p>{prompt}</p>
+              <Button onClick={() => generateImages(prompt)}>Generate Image</Button>
               {/* Pass prompt to your Nano Banana 2 generation function here */}
             </div>
           ))}
+          
           <Card className="border-slate-200 dark:border-zinc-800 shadow-sm">
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-2">
