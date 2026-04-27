@@ -2,8 +2,6 @@ import { create } from "zustand";
 
 import animationEntitiesSeed from "./animationentites.json";
 
-export const ANIMATION_ENTITIES_STORAGE_KEY = "animation-entities-dashboard";
-
 export type AnimationEntityType = "entity" | "environment" | "prop";
 
 export interface AnimationEntityCharacter {
@@ -13,7 +11,6 @@ export interface AnimationEntityCharacter {
     src: string;
     fileName: string;
     mimeType: string;
-    storageKey: string;
     previewUrl: string;
     size: number;
   };
@@ -65,7 +62,6 @@ interface AddCharactersInput {
 interface AnimationDashboardState {
   entitiesDocument: AnimationEntitiesDocument;
   isUploading: boolean;
-  loadEntities: () => void;
   createEntityWithCharacters: (input: CreateEntityInput) => Promise<void>;
   addCharactersToEntity: (input: AddCharactersInput) => Promise<void>;
   removeEntity: (entityId: string) => void;
@@ -129,7 +125,6 @@ function getInitialDocument(): AnimationEntitiesDocument {
                   src: character.metadata.src,
                   fileName: character.metadata.src,
                   mimeType: "image/svg+xml",
-                  storageKey: `${ANIMATION_ENTITIES_STORAGE_KEY}:seed:${entityId}:${characterId}`,
                   previewUrl: character.metadata.src,
                   size: 0,
                 },
@@ -142,19 +137,7 @@ function getInitialDocument(): AnimationEntitiesDocument {
   };
 }
 
-function persistDocument(document: AnimationEntitiesDocument) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(
-    ANIMATION_ENTITIES_STORAGE_KEY,
-    JSON.stringify(document)
-  );
-}
-
 async function buildCharacters(
-  entityId: string,
   characterLabel: string,
   files: File[]
 ): Promise<Record<string, AnimationEntityCharacter>> {
@@ -166,11 +149,6 @@ async function buildCharacters(
     const previewUrl = await toDataUrl(file);
     const characterId =
       files.length === 1 ? baseLabel : `${baseLabel}${index + 1}`;
-    const storageKey = `${ANIMATION_ENTITIES_STORAGE_KEY}:asset:${entityId}:${characterId}`;
-
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(storageKey, previewUrl);
-    }
 
     characters[characterId] = {
       id: characterId,
@@ -179,7 +157,6 @@ async function buildCharacters(
         src: file.name,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
-        storageKey,
         previewUrl,
         size: file.size,
       },
@@ -189,44 +166,16 @@ async function buildCharacters(
   return characters;
 }
 
-function removeEntityAssets(entity: AnimationDashboardEntity) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  for (const character of Object.values(entity.characters)) {
-    window.localStorage.removeItem(character.metadata.storageKey);
-  }
-}
-
 export const useAnimationDashboardStore = create<AnimationDashboardState>((set, get) => ({
   entitiesDocument: getInitialDocument(),
   isUploading: false,
-  loadEntities: () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const raw = window.localStorage.getItem(ANIMATION_ENTITIES_STORAGE_KEY);
-    if (!raw) {
-      set({ entitiesDocument: getInitialDocument() });
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as AnimationEntitiesDocument;
-      set({ entitiesDocument: parsed });
-    } catch {
-      set({ entitiesDocument: getInitialDocument() });
-    }
-  },
   createEntityWithCharacters: async ({
     entityName,
     entityType,
     characterLabel,
     files,
   }) => {
-    if (typeof window === "undefined" || files.length === 0) {
+    if (files.length === 0) {
       return;
     }
 
@@ -234,7 +183,7 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
 
     try {
       const entityId = sanitizeKeyPart(entityName) || makeId("entity");
-      const characters = await buildCharacters(entityId, characterLabel, files);
+      const characters = await buildCharacters(characterLabel, files);
       const defaultCharacter = Object.keys(characters)[0] ?? "";
       const nextDocument: AnimationEntitiesDocument = {
         entities: {
@@ -250,7 +199,6 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
         },
       };
 
-      persistDocument(nextDocument);
       set({ entitiesDocument: nextDocument, isUploading: false });
     } catch (error) {
       console.error("Failed to create animation entity", error);
@@ -258,7 +206,7 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
     }
   },
   addCharactersToEntity: async ({ entityId, characterLabel, files }) => {
-    if (typeof window === "undefined" || files.length === 0) {
+    if (files.length === 0) {
       return;
     }
 
@@ -270,7 +218,7 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
     set({ isUploading: true });
 
     try {
-      const nextCharacters = await buildCharacters(entityId, characterLabel, files);
+      const nextCharacters = await buildCharacters(characterLabel, files);
       const nextDocument: AnimationEntitiesDocument = {
         entities: {
           ...get().entitiesDocument.entities,
@@ -286,7 +234,6 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
         },
       };
 
-      persistDocument(nextDocument);
       set({ entitiesDocument: nextDocument, isUploading: false });
     } catch (error) {
       console.error("Failed to add characters to entity", error);
@@ -294,34 +241,16 @@ export const useAnimationDashboardStore = create<AnimationDashboardState>((set, 
     }
   },
   removeEntity: (entityId) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const currentEntity = get().entitiesDocument.entities[entityId];
     if (!currentEntity) {
       return;
     }
 
-    removeEntityAssets(currentEntity);
-
     const nextEntities = { ...get().entitiesDocument.entities };
     delete nextEntities[entityId];
 
     const nextDocument = { entities: nextEntities };
-    persistDocument(nextDocument);
     set({ entitiesDocument: nextDocument });
   },
-  clearEntities: () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    for (const entity of Object.values(get().entitiesDocument.entities)) {
-      removeEntityAssets(entity);
-    }
-
-    window.localStorage.removeItem(ANIMATION_ENTITIES_STORAGE_KEY);
-    set({ entitiesDocument: { entities: {} } });
-  },
+  clearEntities: () => set({ entitiesDocument: { entities: {} } }),
 }));

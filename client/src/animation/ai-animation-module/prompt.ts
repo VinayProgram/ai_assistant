@@ -17,7 +17,6 @@ export interface AnimationEntityCharacter {
     src: string;
     fileName: string;
     mimeType: string;
-    storageKey: string;
     size: number;
   };
 }

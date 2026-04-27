@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Pause, Play, Sparkles, WandSparkles } from "lucide-react";
+import { Music4, Pause, Play, Sparkles, WandSparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -110,7 +110,6 @@ function sanitizeEntitiesForPrompt(document: AnimationEntitiesDocument) {
                   src: character.metadata.src,
                   fileName: character.metadata.fileName,
                   mimeType: character.metadata.mimeType,
-                  storageKey: character.metadata.storageKey,
                   size: character.metadata.size,
                 },
               },
@@ -144,7 +143,8 @@ function collectPromptImageReferences(document: AnimationEntitiesDocument) {
 
 const AiAnimationGenModule = () => {
   const entitiesDocument = useAnimationDashboardStore((state) => state.entitiesDocument);
-  const loadEntities = useAnimationDashboardStore((state) => state.loadEntities);
+  const audioInputRef = React.useRef<HTMLInputElement | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const [isPlaying, setIsPlaying] = React.useState(true);
   const [isGenerating, setIsGenerating] = React.useState(false);
@@ -156,17 +156,25 @@ const AiAnimationGenModule = () => {
   >(null);
   const [generationError, setGenerationError] = React.useState("");
   const [currentFrameIndex, setCurrentFrameIndex] = React.useState(0);
-
-  React.useEffect(() => {
-    loadEntities();
-  }, [loadEntities]);
+  const [fpsInput, setFpsInput] = React.useState(
+    String(typedAnimationDocument.sceneMetadata?.fps ?? 2)
+  );
+  const [fpsOverride, setFpsOverride] = React.useState<number | null>(null);
+  const [audioAsset, setAudioAsset] = React.useState<{
+    fileName: string;
+    previewUrl: string;
+  } | null>(null);
 
   const activeAnimationDocument = React.useMemo<AnimationFileShape>(
     () => ({
       ...typedAnimationDocument,
+      sceneMetadata: {
+        ...typedAnimationDocument.sceneMetadata,
+        fps: fpsOverride ?? typedAnimationDocument.sceneMetadata?.fps ?? 2,
+      },
       frames: generatedFrames ?? typedAnimationDocument.frames,
     }),
-    [generatedFrames]
+    [fpsOverride, generatedFrames]
   );
 
   const sortedFrameIds = React.useMemo(
@@ -206,6 +214,22 @@ const AiAnimationGenModule = () => {
     };
   }, [activeAnimationDocument, isPlaying, sortedFrameIds.length]);
 
+  React.useEffect(() => {
+    const audioElement = audioRef.current;
+    if (!audioElement) {
+      return;
+    }
+
+    if (isPlaying) {
+      void audioElement.play().catch(() => {
+        // Ignore autoplay rejections and let the user start audio manually.
+      });
+      return;
+    }
+
+    audioElement.pause();
+  }, [isPlaying, audioAsset]);
+
   const handleGenerateAnimation = async () => {
     setGenerationError("");
     setIsGenerating(true);
@@ -230,6 +254,42 @@ const AiAnimationGenModule = () => {
     }
   };
 
+  const handleApplyFrameRate = () => {
+    const nextFps = Number(fpsInput);
+    if (!Number.isFinite(nextFps) || nextFps <= 0) {
+      setGenerationError("Frame rate must be a number greater than 0.");
+      return;
+    }
+
+    setGenerationError("");
+    setFpsOverride(nextFps);
+  };
+
+  const handleAudioSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (audioAsset?.previewUrl) {
+      URL.revokeObjectURL(audioAsset.previewUrl);
+    }
+
+    setAudioAsset({
+      fileName: file.name,
+      previewUrl: URL.createObjectURL(file),
+    });
+    event.target.value = "";
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (audioAsset?.previewUrl) {
+        URL.revokeObjectURL(audioAsset.previewUrl);
+      }
+    };
+  }, [audioAsset]);
+
   const currentFrameId = sortedFrameIds[currentFrameIndex] ?? sortedFrameIds[0];
   const currentFrame = activeAnimationDocument.frames[currentFrameId] ?? {};
   const sceneWidth = activeAnimationDocument.sceneMetadata?.width ?? 900;
@@ -237,6 +297,7 @@ const AiAnimationGenModule = () => {
   const sceneBackground =
     activeAnimationDocument.sceneMetadata?.background ??
     "linear-gradient(180deg, #f8fbff 0%, #eef6ff 60%, #fff8eb 100%)";
+  const currentFps = activeAnimationDocument.sceneMetadata?.fps ?? 2;
 
   return (
     <section className={shellClassName}>
@@ -279,6 +340,48 @@ const AiAnimationGenModule = () => {
             <p className="text-sm text-slate-500">
               Describe the motion and expression changes you want, then generate frames.
             </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,220px)_auto_minmax(0,1fr)]">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              Frame Rate
+            </p>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={fpsInput}
+              onChange={(event) => setFpsInput(event.target.value)}
+              className="mt-2 flex h-10 w-full rounded-xl border border-input bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </div>
+          <div className="self-end">
+            <Button variant="outline" onClick={handleApplyFrameRate}>
+              Update Framerate
+            </Button>
+          </div>
+          <div className="flex flex-col justify-end gap-3 sm:flex-row sm:items-end sm:justify-end">
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
+              onChange={handleAudioSelection}
+              className="hidden"
+            />
+            <Button variant="outline" onClick={() => audioInputRef.current?.click()}>
+              <Music4 className="size-4" />
+              Add Audio
+            </Button>
+            {audioAsset ? (
+              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="truncate text-sm font-medium text-slate-700">
+                  {audioAsset.fileName}
+                </p>
+                <audio ref={audioRef} src={audioAsset.previewUrl} controls className="mt-2 h-10" />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -374,10 +477,10 @@ const AiAnimationGenModule = () => {
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-            Render Rule
+            Playback
           </p>
           <p className="mt-2 text-sm font-medium text-slate-700">
-            Find entity by ID, resolve character, apply frame transform
+            {currentFps} fps{audioAsset ? ` with audio: ${audioAsset.fileName}` : ""}
           </p>
         </div>
       </div>

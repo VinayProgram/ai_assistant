@@ -49,15 +49,16 @@ function CharacterAssetCard({ character }: { character: AnimationEntityCharacter
         <div>
           <p className="text-sm font-semibold text-slate-900">{character.id}</p>
           <p className="text-xs text-slate-500">
-            {character.metadata.fileName} {character.metadata.size > 0 ? `• ${formatBytes(character.metadata.size)}` : ""}
+            {character.metadata.fileName}
+            {character.metadata.size > 0 ? ` • ${formatBytes(character.metadata.size)}` : ""}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-            LocalStorage Path
+            Asset Type
           </p>
           <p className="mt-1 break-all font-mono text-xs text-slate-700">
-            {character.metadata.storageKey}
+            {character.metadata.mimeType}
           </p>
         </div>
       </div>
@@ -162,7 +163,6 @@ const AnimationDashboard = () => {
 
   const entitiesDocument = useAnimationDashboardStore((state) => state.entitiesDocument);
   const isUploading = useAnimationDashboardStore((state) => state.isUploading);
-  const loadEntities = useAnimationDashboardStore((state) => state.loadEntities);
   const createEntityWithCharacters = useAnimationDashboardStore(
     (state) => state.createEntityWithCharacters
   );
@@ -171,10 +171,6 @@ const AnimationDashboard = () => {
   );
   const removeEntity = useAnimationDashboardStore((state) => state.removeEntity);
   const clearEntities = useAnimationDashboardStore((state) => state.clearEntities);
-
-  React.useEffect(() => {
-    loadEntities();
-  }, [loadEntities]);
 
   const entities = React.useMemo(
     () => Object.values(entitiesDocument.entities),
@@ -243,10 +239,10 @@ const AnimationDashboard = () => {
           </div>
           <div className="rounded-2xl bg-white px-4 py-4">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-              Storage Root
+              Runtime Mode
             </p>
-            <p className="mt-2 break-all font-mono text-xs text-slate-700">
-              animation-entities-dashboard
+            <p className="mt-2 text-sm font-medium text-slate-700">
+              In-memory asset state
             </p>
           </div>
         </div>
