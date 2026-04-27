@@ -8,7 +8,7 @@ import {
   promptAnimation,
   type PromptAnimationImageReference,
   type PromptAnimationResponse,
-} from "./ai-request-animation-file";
+} from "./ai-request-animation-file-api";
 import {
   useAnimationDashboardStore,
   type AnimationDashboardEntity,

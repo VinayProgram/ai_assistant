@@ -1,0 +1,3 @@
+export const ImageGenerationPrompt=(characterPrompt:string)=>`
+create characters of 2d animation png without background Style: flat 2d vector art, bold outlines, thick strokes, high contrast, studio lighting. Character details:${characterPrompt} `
+export const StorytoImagesPrompt=(story:string)=>`in the given story break the story into characters and create prompt for characters of 2d animation png without background for each character. story: ${story} make sure the response is in json format with keys as character names and values as prompt for each character { "character1": "prompt for character 1", "character2": "prompt for character 2" }`
