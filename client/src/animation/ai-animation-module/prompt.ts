@@ -1,3 +1,5 @@
+import type { AnimationEntitiesDocument } from "./ai-request-animation-file-api"
+
 export const  SYSTEM_PROMPT=`You are a 2D animation frame generator.
 
 Your job is to convert a STORY + ENTITIES into a valid FRAME animation JSON.
@@ -141,7 +143,9 @@ Translate the STORY into a frame-by-frame animation timeline using:
 }
 `
 
-export const USER_PROMPT=(storyPrompt: string, entities: string) => `
+export const USER_PROMPT=(storyPrompt: string, entities: AnimationEntitiesDocument, frameRate: number) => `
 storyPrompt: ${storyPrompt}
 
-entities:${entities}`
+entities:${JSON.stringify(entities)}
+minimum frames: ${frameRate}
+`
